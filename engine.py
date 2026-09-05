@@ -39,7 +39,7 @@ async def crawl_site_deeply(target_url: str, status_box=None) -> str:
             "--no-sandbox",
             "--disable-gpu",
             "--disable-setuid-sandbox",
-            "--single-process",  # Dramatically reduces RAM footprint
+            "--no-zygote",
             ]
         )
         context = await browser.new_context()
