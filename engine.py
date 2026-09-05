@@ -31,12 +31,25 @@ async def crawl_site_deeply(target_url: str, status_box=None) -> str:
         if status_box:
             status_box.update(label="🚀 Initializing Stealth Firefox Core...", state="running")
             
-        browser = await p.firefox.launch(headless=True)
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
-            viewport={"width": 1920, "height": 1080}
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+            headless=True,
+            args=[
+            "--disable-dev-shm-usage",
+            "--no-sandbox",
+            "--disable-gpu",
+            "--disable-setuid-sandbox",
+            "--single-process",  # Dramatically reduces RAM footprint
+            ]
         )
+        context = await browser.new_context()
         page = await context.new_page()
+    
+    # Block heavy assets (images, stylesheets, fonts) to save memory
+        await page.route("**/*.{png,jpg,jpeg,svg,css,woff,woff2}", lambda route: route.abort())
+    
+    # Your scraping logic here...
+        await browser.close()
 
         try:
             msg1 = f"🕵️ Mapping website infrastructure: {target_url}"
