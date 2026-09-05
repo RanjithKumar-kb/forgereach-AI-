@@ -35,14 +35,16 @@ async def crawl_site_deeply(target_url: str, status_box=None) -> str:
             browser = await p.chromium.launch(
             headless=True,
             args=[
-            "--disable-dev-shm-usage",
             "--no-sandbox",
-            "--disable-gpu",
             "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",  # Overcomes limited shared memory (/dev/shm) in containers
+            "--disable-gpu",
             "--no-zygote",
+            "--disable-software-rasterizer",
+            "--disable-extensions",
             ]
         )
-        context = await browser.new_context()
+        context = await browser.new_context(viewport={"width": 1280, "height": 720} )
         page = await context.new_page()
     
     # Block heavy assets (images, stylesheets, fonts) to save memory
