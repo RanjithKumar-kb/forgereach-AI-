@@ -30,7 +30,7 @@ async def crawl_site_deeply(target_url: str, status_box=None) -> str:
         if status_box:
             status_box.update(label="🚀 Initializing Chromium Engine...", state="running")
 
-        # Launch Chromium with low-memory Linux container flags
+        # Launch Chromium forcing HTTP/1.1 and using safe Linux flags
         browser = await p.chromium.launch(
             headless=True,
             args=[
@@ -40,15 +40,25 @@ async def crawl_site_deeply(target_url: str, status_box=None) -> str:
                 "--disable-gpu",
                 "--no-zygote",
                 "--disable-software-rasterizer",
+                "--disable-http2",  # Prevents ERR_HTTP2_PROTOCOL_ERROR on sites like Honeywell
             ]
         )
 
         try:
-            context = await browser.new_context()
+            # Set a standard realistic User-Agent header
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            )
             page = await context.new_page()
 
-            # Block heavy assets to prevent OOM on Render Free Tier
-            await page.route("**/*.{png,jpg,jpeg,svg,css,woff,woff2,gif,mp4,webp}", lambda route: route.abort())
+            # Safely abort asset types without breaking HTTP protocol streams
+            async def handle_route(route):
+                if route.request.resource_type in ["image", "stylesheet", "font", "media"]:
+                    await route.abort()
+                else:
+                    await route.continue_()
+
+            await page.route("**/*", handle_route)
 
             msg1 = f"🕵️ Mapping website infrastructure: {target_url}"
             if status_box: status_box.write(msg1)
