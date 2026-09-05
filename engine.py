@@ -63,7 +63,7 @@ async def crawl_site_deeply(target_url: str, status_box=None) -> str:
             msg1 = f"🕵️ Mapping website infrastructure: {target_url}"
             if status_box: status_box.write(msg1)
 
-            await page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
+            await page.goto(target_url, wait_until="commit", timeout=45000)
             await page.wait_for_timeout(3000)
 
             homepage_html = await page.content()
@@ -91,7 +91,7 @@ async def crawl_site_deeply(target_url: str, status_box=None) -> str:
 
                 visited_pages.add(current_page_url)
 
-                await page.goto(current_page_url, wait_until="domcontentloaded", timeout=25000)
+                await page.goto(current_page_url, wait_until="commit", timeout=45000)
                 await page.wait_for_timeout(2000)
 
                 page_html = await page.content()
