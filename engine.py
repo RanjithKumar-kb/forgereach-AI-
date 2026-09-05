@@ -4,7 +4,6 @@ import os
 from urllib.parse import urljoin, urlparse
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
-# 🟢 New Database Import
 import chromadb
 
 def get_base_domain(url: str) -> str:
@@ -29,44 +28,41 @@ async def crawl_site_deeply(target_url: str, status_box=None) -> str:
 
     async with async_playwright() as p:
         if status_box:
-            status_box.update(label="🚀 Initializing Stealth Firefox Core...", state="running")
-            
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
+            status_box.update(label="🚀 Initializing Chromium Engine...", state="running")
+
+        # Launch Chromium with low-memory Linux container flags
+        browser = await p.chromium.launch(
             headless=True,
             args=[
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",  # Overcomes limited shared memory (/dev/shm) in containers
-            "--disable-gpu",
-            "--no-zygote",
-            "--disable-software-rasterizer",
-            "--disable-extensions",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--no-zygote",
+                "--disable-software-rasterizer",
             ]
         )
-        context = await browser.new_context(viewport={"width": 1280, "height": 720} )
-        page = await context.new_page()
-    
-    # Block heavy assets (images, stylesheets, fonts) to save memory
-        await page.route("**/*.{png,jpg,jpeg,svg,css,woff,woff2}", lambda route: route.abort())
-    
-    # Your scraping logic here...
-        await browser.close()
 
         try:
+            context = await browser.new_context()
+            page = await context.new_page()
+
+            # Block heavy assets to prevent OOM on Render Free Tier
+            await page.route("**/*.{png,jpg,jpeg,svg,css,woff,woff2,gif,mp4,webp}", lambda route: route.abort())
+
             msg1 = f"🕵️ Mapping website infrastructure: {target_url}"
             if status_box: status_box.write(msg1)
-            
+
             await page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
-            await page.wait_for_timeout(3000) 
-            
+            await page.wait_for_timeout(3000)
+
             homepage_html = await page.content()
             soup = BeautifulSoup(homepage_html, 'html.parser')
-            
+
             for anchor in soup.find_all('a', href=True):
                 href = anchor['href']
                 full_url = urljoin(target_url, href)
-                
+
                 if get_base_domain(full_url) == base_domain:
                     lower_url = full_url.lower()
                     if any(keyword in lower_url for keyword in ["about", "service", "product", "contact", "feature", "solutions"]):
@@ -79,51 +75,45 @@ async def crawl_site_deeply(target_url: str, status_box=None) -> str:
             for current_page_url in final_queue:
                 if current_page_url in visited_pages:
                     continue
-                    
+
                 msg3 = f"📖 Deep reading: {current_page_url}"
                 if status_box: status_box.write(msg3)
-                
+
                 visited_pages.add(current_page_url)
-                
+
                 await page.goto(current_page_url, wait_until="domcontentloaded", timeout=25000)
                 await page.wait_for_timeout(2000)
-                
+
                 page_html = await page.content()
                 page_soup = BeautifulSoup(page_html, 'html.parser')
                 for element in page_soup(["script", "style", "nav", "footer", "header", "noscript"]):
                     element.decompose()
-                
+
                 clean_page_text = page_soup.get_text(separator=' ', strip=True)
                 all_raw_extracted_text += f" [Source: {current_page_url}] " + clean_page_text
 
             # Text Chunking Phase
             structured_chunks = clean_and_chunk_text(all_raw_extracted_text, chunk_size=200, overlap=40)
-            
-            # 🟢 WEEK 4 VECTOR DATABASE COMMIT PHASE
-            msg4 = "💾 Initializing Vector Database Vectoring Engine..."
+
+            msg4 = "💾 Initializing Vector Database Engine..."
             if status_box: status_box.write(msg4)
-            
-            # Initialize a persistent database instance (saves data into a folder named 'chroma_db')
+
+            # ChromaDB Persistent Storage
             chroma_client = chromadb.PersistentClient(path="./chroma_db")
-            
-            # Create or load a data collection table inside the database
             collection = chroma_client.get_or_create_collection(name="account_intelligence")
-            
-            # Prepare unique metadata lists and incremental IDs for the database entries
+
             documents_ids = [f"id_{base_domain}_{i}" for i in range(len(structured_chunks))]
             metadata_entries = [{"source": base_domain} for _ in structured_chunks]
-            
-            # Save the chunks cleanly into our vector database
+
             collection.upsert(
                 documents=structured_chunks,
                 ids=documents_ids,
                 metadatas=metadata_entries
             )
-            
+
             msg5 = f"🔒 Committed {len(structured_chunks)} structured data fragments securely to local vector memory storage."
             if status_box: status_box.write(msg5)
-            
-            # Stitch chunks for the layout stream output
+
             formatted_output = "\n\n=== CHROMA DB FRAGMENT ===\n".join(structured_chunks)
             return formatted_output
 
